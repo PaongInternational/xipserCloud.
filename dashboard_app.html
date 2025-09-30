@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XipserCloud Panel - Kontrol Termux</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f7fafc; }
+        .card { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        #log-output { height: 200px; overflow-y: scroll; font-size: 0.85rem; }
+        .service-status { transition: background-color 0.3s, color 0.3s; }
+        .nav-item { cursor: pointer; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- LOGIN CARD -->
+    <div id="login-card" class="card bg-white p-8 rounded-xl w-full max-w-sm transition-opacity duration-300">
+        <h1 class="text-3xl font-bold text-center text-green-700 mb-4">XipserCloud</h1>
+        <p class="text-center text-gray-500 mb-6">Akses Panel Kontrol Termux</p>
+        <div id="login-message" class="bg-yellow-100 text-yellow-800 p-3 rounded-lg text-sm mb-4">
+            Kredensial diambil dari **config.json**
+        </div>
+        <form id="login-form">
+            <div class="mb-4">
+                <label for="username" class="block text-gray-700 font-medium mb-1">Username</label>
+                <input type="text" id="username" name="username" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500">
+            </div>
+            <div class="mb-6">
+                <label for="password" class="block text-gray-700 font-medium mb-1">Password</label>
+                <input type="password" id="password" name="password" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-green-500 focus:border-green-500">
+            </div>
+            <button type="submit" class="w-full bg-green-600 text-white p-3 rounded-lg font-semibold hover:bg-green-700 transition duration-200 shadow-md">
+                Masuk ke Dashboard
+            </button>
+            <p id="error-message" class="text-red-600 mt-3 text-center text-sm hidden">Error Login</p>
+        </form>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="dashboard" class="hidden w-full max-w-5xl bg-white rounded-xl card p-6 lg:p-10">
+        <header class="flex justify-between items-center border-b pb-4 mb-6">
+            <h1 class="text-3xl font-bold text-green-700">XipserCloud Panel</h1>
+            <button id="logout-button" class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-600 transition">Logout</button>
+        </header>
+
+        <!-- NAVIGATION -->
+        <nav class="mb-6 flex space-x-4 overflow-x-auto pb-2 border-b">
+            <div class="nav-item px-4 py-2 rounded-lg bg-green-100 text-green-700 font-medium" data-target="status-tab">Status Server</div>
+            <div class="nav-item px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-target="service-tab">Kontrol Layanan</div>
+            <div class="nav-item px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-target="nginx-tab">Nginx Deploy</div>
+            <div class="nav-item px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-target="db-tab">MariaDB CLI</div>
+            <div class="nav-item px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100" data-target="firewall-tab">Firewall (iptables)</div>
+        </nav>
+
+        <!-- TAB CONTENT -->
+        <div id="tab-content">
+            <!-- 1. STATUS SERVER TAB -->
+            <div id="status-tab" class="tab-pane">
+                <h2 class="text-2xl font-semibold mb-4">Status & Statistik Server</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Uptime</p>
+                        <p id="uptime-value" class="text-xl font-bold text-blue-700">Memuat...</p>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Penggunaan RAM</p>
+                        <p id="ram-value" class="text-xl font-bold text-blue-700">Memuat...</p>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Penggunaan CPU</p>
+                        <p id="cpu-value" class="text-xl font-bold text-blue-700">Memuat...</p>
+                    </div>
+                </div>
+                <button id="refresh-status" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-300 transition">Refresh Statistik</button>
+            </div>
+
+            <!-- 2. SERVICE CONTROL TAB -->
+            <div id="service-tab" class="tab-pane hidden">
+                <h2 class="text-2xl font-semibold mb-4">Kontrol Layanan Termux</h2>
+                <p class="text-sm text-gray-500 mb-4">Mengontrol layanan Nginx, MariaDB, dan PHP-FPM di Termux.</p>
+                <div id="service-grid" class="space-y-4">
+                    <!-- Services loaded by JS -->
+                </div>
+            </div>
+
+            <!-- 3. NGINX DEPLOY TAB -->
+            <div id="nginx-tab" class="tab-pane hidden">
+                <h2 class="text-2xl font-semibold mb-4">Deploy Virtual Host Nginx</h2>
+                <p class="text-sm text-gray-500 mb-4">Mendeploy Nginx Virtual Host baru menggunakan template.</p>
+                <form id="nginx-deploy-form" class="space-y-4">
+                    <div>
+                        <label for="host_name" class="block text-gray-700 font-medium mb-1">Nama Host (Domain)</label>
+                        <input type="text" id="host_name" name="host_name" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="contoh.com" required>
+                    </div>
+                    <div>
+                        <label for="root_path" class="block text-gray-700 font-medium mb-1">Jalur Root (Absolut)</label>
+                        <input type="text" id="root_path" name="root_path" class="w-full p-3 border border-gray-300 rounded-lg" placeholder="/data/data/com.termux/files/home/www/contoh" required>
+                    </div>
+                    <button type="submit" class="bg-green-600 text-white p-3 rounded-lg font-semibold hover:bg-green-700 transition">
+                        Deploy dan Muat Ulang Nginx
+                    </button>
+                </form>
+            </div>
+
+            <!-- 4. MARIADB CLI TAB -->
+            <div id="db-tab" class="tab-pane hidden">
+                <h2 class="text-2xl font-semibold mb-4">MariaDB Command Line Interface</h2>
+                <p class="text-sm text-gray-500 mb-4">Jalankan perintah SQL langsung di database MariaDB (pastikan layanan MariaDB berjalan).</p>
+                <form id="db-cli-form" class="space-y-4">
+                    <div>
+                        <label for="sql_command" class="block text-gray-700 font-medium mb-1">Perintah SQL</label>
+                        <textarea id="sql_command" name="command" rows="4" class="w-full p-3 border border-gray-300 rounded-lg font-mono" placeholder="SELECT * FROM users;"></textarea>
+                    </div>
+                    <button type="submit" class="bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 transition">
+                        Eksekusi SQL
+                    </button>
+                </form>
+            </div>
+
+            <!-- 5. FIREWALL (IPTABLES) TAB -->
+            <div id="firewall-tab" class="tab-pane hidden">
+                <h2 class="text-2xl font-semibold mb-4">Kontrol Firewall (iptables)</h2>
+                <p class="text-sm text-gray-500 mb-4 text-red-600 font-bold">PERINGATAN: Fitur ini memerlukan paket `iptables` dan mungkin memerlukan izin root di beberapa lingkungan.</p>
+                <form id="firewall-cli-form" class="space-y-4">
+                    <div>
+                        <label for="iptables_command" class="block text-gray-700 font-medium mb-1">Perintah iptables</label>
+                        <input type="text" id="iptables_command" name="command" class="w-full p-3 border border-gray-300 rounded-lg font-mono" placeholder="iptables -A INPUT -p tcp --dport 22 -j ACCEPT" required>
+                    </div>
+                    <button type="submit" class="bg-red-600 text-white p-3 rounded-lg font-semibold hover:bg-red-700 transition">
+                        Eksekusi iptables
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- CONSOLE OUTPUT -->
+        <div class="mt-8 border-t pt-6">
+            <h3 class="text-xl font-semibold mb-3">Output Konsol</h3>
+            <pre id="log-output" class="bg-gray-800 text-green-400 p-4 rounded-lg font-mono whitespace-pre-wrap"></pre>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        const API_URL = ''; // URL Relatif
+        let token = null;
+
+        // --- UTILITY FUNCTIONS ---
+
+        function showMessage(type, message, isError = false) {
+            const output = document.getElementById('log-output');
+            const timestamp = new Date().toLocaleTimeString('id-ID');
+            const color = isError ? 'text-red-400' : (type === 'INFO' ? 'text-blue-400' : 'text-green-400');
+            output.innerHTML += `<span class="${color}">[${timestamp}][${type}]</span> ${message}\n`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        async function apiCall(endpoint, data = {}) {
+            try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+
+                const response = await fetch(API_URL + endpoint, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(data)
+                });
+
+                if (response.status === 401) {
+                    throw new Error("Sesi berakhir atau otentikasi gagal.");
+                }
+
+                const json = await response.json();
+                if (json.error) {
+                    showMessage('ERROR', json.error, true);
+                    return null;
+                }
+                return json;
+
+            } catch (error) {
+                showMessage('FATAL', 'Gagal terhubung ke server Termux. ' + error.message, true);
+                if (error.message.includes('Otentikasi gagal')) {
+                    handleLogout();
+                }
+                return null;
+            }
+        }
+
+        // --- AUTHENTICATION ---
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('error-message');
+            errorMsg.classList.add('hidden');
+
+            showMessage('INFO', 'Mencoba login...');
+            
+            const response = await apiCall('/login', { username, password });
+
+            if (response && response.token) {
+                token = response.token;
+                localStorage.setItem('xipser_token', token);
+                showMessage('INFO', 'Login Berhasil!');
+                document.getElementById('login-card').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                loadDashboardData();
+            } else {
+                errorMsg.textContent = 'Username atau Password salah.';
+                errorMsg.classList.remove('hidden');
+            }
+        });
+
+        function handleLogout() {
+            token = null;
+            localStorage.removeItem('xipser_token');
+            document.getElementById('dashboard').classList.add('hidden');
+            document.getElementById('login-card').classList.remove('hidden');
+            showMessage('INFO', 'Logout Berhasil. Silakan login kembali.');
+        }
+        document.getElementById('logout-button').addEventListener('click', handleLogout);
+
+        // --- DASHBOARD DATA & STATUS ---
+
+        async function fetchStatus() {
+            const data = await apiCall('/status');
+            if (data) {
+                document.getElementById('uptime-value').textContent = data.uptime || 'N/A';
+                document.getElementById('ram-value').textContent = data.memory || 'N/A';
+                document.getElementById('cpu-value').textContent = data.cpu_usage || 'N/A';
+                
+                renderServiceControl(data.service_status);
+            }
+        }
+
+        function renderServiceControl(status) {
+            const grid = document.getElementById('service-grid');
+            grid.innerHTML = '';
+            const services = ['nginx', 'mariadb', 'php-fpm'];
+
+            services.forEach(service => {
+                const currentStatus = status[service] || 'Unknown';
+                const isRunning = currentStatus.includes('Running') || currentStatus.includes('Start');
+                const statusColor = isRunning ? 'bg-green-100 text-green-800' : (currentStatus.includes('Stop') || currentStatus.includes('Unknown') ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800');
+                const actionText = isRunning ? 'Stop' : 'Start';
+                const actionColor = isRunning ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600';
+
+                const html = `
+                    <div class="flex flex-col md:flex-row items-start md:items-center justify-between p-4 border rounded-lg bg-gray-50">
+                        <div class="mb-2 md:mb-0">
+                            <span class="text-lg font-semibold text-gray-800">${service.toUpperCase()}</span>
+                            <span class="ml-3 px-3 py-1 rounded-full text-xs font-medium service-status ${statusColor}" data-service="${service}">
+                                Status: ${currentStatus}
+                            </span>
+                        </div>
+                        <button class="control-btn px-4 py-2 text-white rounded-lg text-sm font-medium ${actionColor}" data-service="${service}" data-action="${actionText.toLowerCase()}">
+                            ${actionText}
+                        </button>
+                    </div>
+                `;
+                grid.innerHTML += html;
+            });
+
+            document.querySelectorAll('.control-btn').forEach(button => {
+                button.addEventListener('click', handleServiceControl);
+            });
+        }
+        
+        async function handleServiceControl(e) {
+            const service = e.target.getAttribute('data-service');
+            const action = e.target.getAttribute('data-action');
+            
+            showMessage('INFO', `Mengirim perintah untuk ${action} layanan ${service}...`);
+            const data = await apiCall('/service_control', { service, action });
+
+            if (data && data.success) {
+                showMessage('SUCCESS', `Layanan ${service} berhasil di-${action}.`);
+            }
+            // Selalu refresh status setelah aksi
+            fetchStatus();
+        }
+
+        document.getElementById('refresh-status').addEventListener('click', fetchStatus);
+
+
+        // --- NGINX DEPLOYMENT ---
+        document.getElementById('nginx-deploy-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const host_name = document.getElementById('host_name').value;
+            const root_path = document.getElementById('root_path').value;
+            
+            showMessage('INFO', `Mendeploy Nginx untuk ${host_name}...`);
+            const data = await apiCall('/nginx_deploy', { host_name, root_path });
+
+            if (data && data.success) {
+                showMessage('SUCCESS', `Nginx host ${host_name} berhasil di-deploy dan dimuat ulang.`);
+                document.getElementById('nginx-deploy-form').reset();
+            }
+        });
+
+        // --- MARIADB CLI ---
+        document.getElementById('db-cli-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const command = document.getElementById('sql_command').value;
+            
+            showMessage('INFO', `Mengeksekusi perintah SQL...`);
+            const data = await apiCall('/db_cli', { command });
+
+            if (data && data.success) {
+                showMessage('SUCCESS', 'Perintah SQL berhasil dieksekusi. Output:');
+                showMessage('SQL-OUTPUT', data.output);
+                document.getElementById('sql_command').value = '';
+            }
+        });
+
+        // --- FIREWALL CLI ---
+        document.getElementById('firewall-cli-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const command = document.getElementById('iptables_command').value;
+            
+            showMessage('INFO', `Mengeksekusi perintah iptables...`);
+            const data = await apiCall('/firewall_cli', { command });
+
+            if (data && data.success) {
+                showMessage('SUCCESS', 'Perintah iptables berhasil dieksekusi. Output:');
+                showMessage('IPTABLES-OUTPUT', data.output);
+            }
+        });
+
+        // --- TAB MANAGEMENT ---
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.add('hidden'));
+                document.querySelectorAll('.nav-item').forEach(nav => {
+                    nav.classList.remove('bg-green-100', 'text-green-700');
+                    nav.classList.add('text-gray-600', 'hover:bg-gray-100');
+                });
+
+                document.getElementById(this.dataset.target).classList.remove('hidden');
+                this.classList.add('bg-green-100', 'text-green-700');
+                this.classList.remove('text-gray-600', 'hover:bg-gray-100');
+
+                // Load initial data for status tab
+                if (this.dataset.target === 'status-tab') {
+                    fetchStatus();
+                }
+            });
+        });
+
+
+        function loadDashboardData() {
+            fetchStatus();
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = function() {
+            const storedToken = localStorage.getItem('xipser_token');
+            if (storedToken) {
+                token = storedToken;
+                document.getElementById('login-card').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                loadDashboardData();
+            }
+            // Set default tab
+            document.querySelector('.nav-item[data-target="status-tab"]').click();
+        };
+
+    </script>
+</body>
+</html>
+
